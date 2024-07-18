@@ -255,6 +255,67 @@ func TestGetOrderBook(t *testing.T) {
 	}
 }
 
+func TestMatchOrder(t *testing.T) {
+	tests := []struct {
+		name                 string
+		initialBuyOrders     []*Order
+		initialSellOrders    []*Order
+		order                Order
+		expectedBuyOrders    []*Order
+		expectedSellOrders   []*Order
+		expectedBuyQuantity  int
+		expectedSellQuantity int
+	}{
+		{
+			name:                "Match limit buy order with existing sell orders",
+			initialSellOrders:   []*Order{{ID: 1, OrderType: Limit, Side: Sell, Price: 100.0, Quantity: 10, Timestamp: time.Now()}},
+			order:               Order{ID: 2, OrderType: Limit, Side: Buy, Price: 100.0, Quantity: 10, Timestamp: time.Now()},
+			expectedSellOrders:  []*Order{},
+			expectedBuyOrders:   []*Order{},
+			expectedBuyQuantity: 0,
+		},
+		{
+			name:                 "Match limit sell order with existing buy orders",
+			initialBuyOrders:     []*Order{{ID: 2, OrderType: Limit, Side: Buy, Price: 100.0, Quantity: 10, Timestamp: time.Now()}},
+			order:                Order{ID: 1, OrderType: Limit, Side: Sell, Price: 100.0, Quantity: 10, Timestamp: time.Now()},
+			expectedBuyOrders:    []*Order{},
+			expectedSellOrders:   []*Order{},
+			expectedSellQuantity: 0,
+		},
+		{
+			name:                "Market buy order matches all available sell orders",
+			initialSellOrders:   []*Order{{ID: 1, OrderType: Limit, Side: Sell, Price: 100.0, Quantity: 10, Timestamp: time.Now()}},
+			order:               Order{ID: 2, OrderType: Market, Side: Buy, Price: 0.0, Quantity: 10, Timestamp: time.Now()},
+			expectedSellOrders:  []*Order{},
+			expectedBuyOrders:   []*Order{},
+			expectedBuyQuantity: 0,
+		},
+		{
+			name:                 "Market sell order matches all available buy orders",
+			initialBuyOrders:     []*Order{{ID: 1, OrderType: Limit, Side: Buy, Price: 100.0, Quantity: 10, Timestamp: time.Now()}},
+			order:                Order{ID: 2, OrderType: Market, Side: Sell, Price: 0.0, Quantity: 10, Timestamp: time.Now()},
+			expectedBuyOrders:    []*Order{},
+			expectedSellOrders:   []*Order{},
+			expectedSellQuantity: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			me := NewMatchingEngine()
+			me.OrderBook.BuyOrders = tt.initialBuyOrders
+			me.OrderBook.SellOrders = tt.initialSellOrders
+
+			me.matchOrder(&tt.order)
+
+			assertOrdersEqual(t, me.OrderBook.BuyOrders, tt.expectedBuyOrders)
+			assertOrdersEqual(t, me.OrderBook.SellOrders, tt.expectedSellOrders)
+			assert.Equal(t, tt.expectedBuyQuantity, tt.order.Quantity)
+			assert.Equal(t, tt.expectedSellQuantity, tt.order.Quantity)
+		})
+	}
+}
+
 func assertOrdersEqual(t *testing.T, actual, expected []*Order) {
 	if len(actual) != len(expected) {
 		t.Errorf("expected %d orders, got %d orders", len(expected), len(actual))
